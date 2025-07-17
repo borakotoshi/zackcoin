@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ZackCoin Exchange</title>
+<style>
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #121212;
+    color: #fff;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+    flex-direction: column;
+}
+.container {
+    width: 400px;
+    background: #1e1e1e;
+    padding: 20px;
+    border-radius: 12px;
+    text-align: center;
+}
+h1 { color: #00ff99; }
+input, button {
+    width: 90%;
+    padding: 10px;
+    margin: 8px 0;
+    border: none;
+    border-radius: 6px;
+}
+button {
+    background: #00ff99;
+    font-weight: bold;
+    cursor: pointer;
+}
+button:hover { background: #00cc77; }
+.hidden { display: none; }
+canvas { background: #2a2a2a; border-radius: 8px; margin-top: 10px; }
+.admin-panel { margin-top: 15px; padding: 10px; background: #2a2a2a; border-radius: 8px; }
+.admin-panel h3 { color: #ff4444; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="auth" class="container">
+    <h1>ZackCoin Exchange</h1>
+    <input type="text" id="username" placeholder="Enter Username">
+    <button onclick="login()">Enter</button>
+</div>
+
+<!-- DASHBOARD -->
+<div id="dashboard" class="hidden container">
+    <h2>Welcome, <span id="userName"></span></h2>
+    <p>Balance: $<span id="balance">0</span></p>
+    <p>ZackCoin: <span id="zackBalance">0</span></p>
+
+    <!-- Add Funds -->
+    <div>
+        <input type="number" id="addAmount" placeholder="Enter Amount to Add">
+        <button onclick="requestPayment()">Request Payment</button>
+    </div>
+
+    <!-- Buy/Sell -->
+    <div>
+        <h3>Price: $<span id="price">20</span></h3>
+        <input type="number" id="coinAmount" placeholder="Amount">
+        <button onclick="buy()">Buy</button>
+        <button onclick="sell()">Sell</button>
+    </div>
+
+    <canvas id="priceChart" width="350" height="150"></canvas>
+
+    <!-- Admin Panel -->
+    <div id="adminPanel" class="admin-panel hidden">
+        <h3>Admin Panel</h3>
+        <input type="number" id="newPrice" placeholder="Set New Price">
+        <button onclick="updatePrice()">Update Price</button>
+        <input type="text" id="targetUser" placeholder="Username to Add Funds">
+        <input type="number" id="targetAmount" placeholder="Amount">
+        <button onclick="addFundsToUser()">Add Funds to User</button>
+        <button onclick="resetUsers()">Reset All Users</button>
+    </div>
+
+    <button onclick="logout()">Logout</button>
+</div>
+
+<script>
+let users = JSON.parse(localStorage.getItem('users')) || [];
+let currentUser = null;
+let price = 20;
+let priceHistory = [price];
+
+const chartCtx = document.getElementById('priceChart').getContext('2d');
+const priceChart = new Chart(chartCtx, {
+    type: 'line',
+    data: {
+        labels: ['Start'],
+        datasets: [{
+            label: 'ZackCoin Price',
+            data: [price],
+            borderColor: '#00ff99',
+            fill: false
+        }]
+    }
+});
+
+function login() {
+    const name = document.getElementById('username').value.trim();
+    if (!name) return alert('Enter username');
+
+    let user = users.find(u => u.name === name);
+    if (!user) {
+        user = { name, balance: 19, zack: 0 };
+        users.push(user);
+        saveUsers();
+        alert('New account created! Bonus $19 added.');
+    }
+
+    currentUser = user;
+    document.getElementById('auth').classList.add('hidden');
+    document.getElementById('dashboard').classList.remove('hidden');
+    document.getElementById('userName').innerText = currentUser.name;
+
+    if (name.toLowerCase() === 'admin') {
+        document.getElementById('adminPanel').classList.remove('hidden');
+    }
+
+    updateDashboard();
+}
+
+function updateDashboard() {
+    document.getElementById('balance').innerText = currentUser.balance.toFixed(2);
+    document.getElementById('zackBalance').innerText = currentUser.zack;
+    document.getElementById('price').innerText = price.toFixed(2);
+}
+
+// Request Payment via Email
+function requestPayment() {
+    const amount = document.getElementById('addAmount').value;
+    if (amount <= 0) return alert('Enter a valid amount');
+
+    const subject = encodeURIComponent("Add Funds Request");
+    const body = encodeURIComponent(`Username: ${currentUser.name}\nAmount: $${amount}\nPlease provide payment details.`);
+    const email = "muhamadzarifdanish@gmail.com";
+
+    window.location.href = `mailto:${email}?subject=${subject}&body=${body}`;
+}
+
+function buy() {
+    const amount = parseFloat(document.getElementById('coinAmount').value);
+    if (amount > 0 && currentUser.balance >= amount * price) {
+        currentUser.balance -= amount * price;
+        currentUser.zack += amount;
+        saveUsers();
+        updateDashboard();
+    } else alert('Not enough balance!');
+}
+
+function sell() {
+    const amount = parseFloat(document.getElementById('coinAmount').value);
+    if (amount > 0 && currentUser.zack >= amount) {
+        currentUser.zack -= amount;
+        currentUser.balance += amount * price;
+        saveUsers();
+        updateDashboard();
+    } else alert('Not enough ZackCoin!');
+}
+
+function saveUsers() {
+    const index = users.findIndex(u => u.name === currentUser.name);
+    users[index] = currentUser;
+    localStorage.setItem('users', JSON.stringify(users));
+}
+
+function updatePrice() {
+    const newPrice = parseFloat(document.getElementById('newPrice').value);
+    if (newPrice > 0) {
+        price = newPrice;
+        addPriceHistory();
+        updateDashboard();
+    }
+}
+
+function addFundsToUser() {
+    const target = document.getElementById('targetUser').value.trim();
+    const amount = parseFloat(document.getElementById('targetAmount').value);
+    if (!target || amount <= 0) return alert('Enter valid details');
+
+    const user = users.find(u => u.name === target);
+    if (!user) return alert('User not found');
+    user.balance += amount;
+    saveUsers();
+    alert(`Added $${amount} to ${target}`);
+}
+
+function resetUsers() {
+    localStorage.removeItem('users');
+    users = [];
+    alert('All users have been reset!');
+    logout();
+}
+
+function autoPrice() {
+    const change = (Math.random() - 0.5) * 2; // +/- 1
+    price = Math.max(1, price + change);
+    addPriceHistory();
+    if (currentUser) updateDashboard();
+}
+
+function addPriceHistory() {
+    priceHistory.push(price);
+    priceChart.data.labels.push('');
+    priceChart.data.datasets[0].data.push(price);
+    priceChart.update();
+}
+
+function logout() {
+    currentUser = null;
+    document.getElementById('dashboard').classList.add('hidden');
+    document.getElementById('auth').classList.remove('hidden');
+}
+
+setInterval(autoPrice, 10000);
+</script>
+</body>
+</html>
